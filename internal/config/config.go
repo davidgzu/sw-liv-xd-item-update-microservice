@@ -1,11 +1,14 @@
 package config
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strconv"
 	"time"
 
+	secretmanager "cloud.google.com/go/secretmanager/apiv1"
+	"cloud.google.com/go/secretmanager/apiv1/secretmanagerpb"
 	"github.com/joho/godotenv"
 )
 
@@ -49,6 +52,7 @@ type FirestoreConfig struct {
 	DatabaseID      string
 	CredentialsFile string
 	ItemsCollection string
+	SecretName      string
 }
 
 type ExternalConfig struct {
@@ -93,6 +97,7 @@ func LoadConfig() (*AppConfig, error) {
 			DatabaseID:      getEnv("FIRESTORE_DATABASE_ID", "logs"),
 			CredentialsFile: getEnv("GOOGLE_APPLICATION_CREDENTIALS", ""),
 			ItemsCollection: "items-data-collection",
+			SecretName:      getEnv("FIREBASE_SECRET_NAME", ""),
 		},
 		External: ExternalConfig{
 			ServiceURL: getEnv("EXTERNAL_SERVICE_URL", ""),
@@ -141,6 +146,30 @@ func getEnv(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
+}
+
+// GetSecretValue obtiene un valor desde Secret Manager
+func GetSecretValue(ctx context.Context, projectID, secretName string) ([]byte, error) {
+	client, err := secretmanager.NewClient(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create secret manager client: %w", err)
+	}
+	defer client.Close()
+
+	// Construir el nombre del recurso
+	resourceName := fmt.Sprintf("projects/%s/secrets/%s/versions/latest", projectID, secretName)
+
+	// Acceder al secret
+	req := &secretmanagerpb.AccessSecretVersionRequest{
+		Name: resourceName,
+	}
+
+	result, err := client.AccessSecretVersion(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to access secret version: %w", err)
+	}
+
+	return result.Payload.Data, nil
 }
 
 func getEnvInt(key string, defaultValue int) int {

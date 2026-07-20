@@ -40,9 +40,8 @@ WORKDIR /app
 # Copiar el binario compilado desde el build stage
 COPY --from=builder /app/server /app/server
 
-# Copiar archivo de credenciales de Firebase (si existe)
-# En producción, esto debería manejarse con secrets de Cloud Run
-COPY --chown=appuser:appuser crp-qas-log-firebase.json /app/crp-qas-log-firebase.json
+# Nota: Las credenciales de Firebase ahora se obtienen desde Secret Manager
+# No es necesario copiar el archivo de credenciales al contenedor
 
 # Cambiar al usuario no-root
 USER appuser

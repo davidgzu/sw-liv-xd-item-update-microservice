@@ -20,6 +20,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"google.golang.org/api/option"
 )
 
 func main() {
@@ -54,14 +55,40 @@ func main() {
 	log.Println("✅ Conexión a MySQL establecida correctamente")
 
 	// Inicializar cliente de Firestore
-	firestoreClient, err := firestore.NewClientWithDatabase(
-		ctx,
-		appCfg.Firestore.ProjectID,
-		appCfg.Firestore.DatabaseID,
-	)
-	if err != nil {
-		log.Fatalf("Error fatal al conectar a Firestore: %v", err)
+	var firestoreClient *firestore.Client
+
+	// Si hay un secret configurado, usar Secret Manager
+	if appCfg.Firestore.SecretName != "" {
+		log.Printf("📦 Obteniendo credenciales de Firebase desde Secret Manager: %s", appCfg.Firestore.SecretName)
+
+		credentials, err := config.GetSecretValue(ctx, appCfg.Firestore.ProjectID, appCfg.Firestore.SecretName)
+		if err != nil {
+			log.Fatalf("Error fatal al obtener secret de Firebase: %v", err)
+		}
+
+		firestoreClient, err = firestore.NewClientWithDatabase(
+			ctx,
+			appCfg.Firestore.ProjectID,
+			appCfg.Firestore.DatabaseID,
+			option.WithCredentialsJSON(credentials),
+		)
+		if err != nil {
+			log.Fatalf("Error fatal al conectar a Firestore con credenciales del secret: %v", err)
+		}
+
+		log.Println("✅ Credenciales de Firebase obtenidas desde Secret Manager")
+	} else {
+		// Usar el método tradicional con archivo de credenciales
+		firestoreClient, err = firestore.NewClientWithDatabase(
+			ctx,
+			appCfg.Firestore.ProjectID,
+			appCfg.Firestore.DatabaseID,
+		)
+		if err != nil {
+			log.Fatalf("Error fatal al conectar a Firestore: %v", err)
+		}
 	}
+
 	defer firestoreClient.Close()
 
 	log.Println("✅ Conexión a Firestore establecida correctamente")
