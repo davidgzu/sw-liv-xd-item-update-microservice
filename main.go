@@ -16,6 +16,8 @@ import (
 	"sw-liv-xd-item-update-microservice/internal/store"
 
 	"cloud.google.com/go/firestore"
+	_ "github.com/go-sql-driver/mysql"
+	"github.com/jmoiron/sqlx"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 )
@@ -30,9 +32,26 @@ func main() {
 	log.Printf("Aplicación iniciando en entorno: %s", appCfg.Env)
 	log.Printf("Configuración de Firestore: ProjectID=%s, Database=%s",
 		appCfg.Firestore.ProjectID, appCfg.Firestore.DatabaseID)
+	log.Printf("Configuración de MySQL: %s", appCfg.Database.SafeSummary())
 
 	// Crear contexto para inicialización
 	ctx := context.Background()
+
+	// Inicializar conexión MySQL
+	dsn := appCfg.Database.DSN()
+	db, err := sqlx.Connect("mysql", dsn)
+	if err != nil {
+		log.Fatalf("Error fatal al conectar a MySQL: %v", err)
+	}
+	defer db.Close()
+
+	// Configurar pool de conexiones
+	db.SetMaxOpenConns(appCfg.Database.MaxOpenConns)
+	db.SetMaxIdleConns(appCfg.Database.MaxIdleConns)
+	db.SetConnMaxLifetime(appCfg.Database.ConnMaxLifetime)
+	db.SetConnMaxIdleTime(appCfg.Database.ConnMaxIdleTime)
+
+	log.Println("✅ Conexión a MySQL establecida correctamente")
 
 	// Inicializar cliente de Firestore
 	firestoreClient, err := firestore.NewClientWithDatabase(
@@ -49,11 +68,16 @@ func main() {
 	log.Printf("   Base de datos: %s", appCfg.Firestore.DatabaseID)
 	log.Printf("   Colección items: %s", appCfg.Firestore.ItemsCollection)
 
-	// Inicializar Firestore store
+	// Inicializar stores
 	firestoreStore := store.NewFirestoreStore(firestoreClient, appCfg.Firestore.ItemsCollection)
+	mysqlStore := store.NewItemStore(db)
+
+	// Inicializar cliente de servicio externo
+	externalServiceClient := store.NewExternalServiceClient(appCfg.External.ServiceURL)
+	log.Printf("✅ Cliente de servicio externo configurado: %s", appCfg.External.ServiceURL)
 
 	// Inicializar servicios
-	itemService := services.NewItemService(firestoreStore, appCfg)
+	itemService := services.NewItemService(firestoreStore, mysqlStore, externalServiceClient, appCfg)
 
 	// Inicializar handlers
 	itemHandler := handlers.NewItemHandler(itemService)

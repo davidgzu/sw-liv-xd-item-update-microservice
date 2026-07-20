@@ -14,7 +14,7 @@ import (
 
 // ItemService define la interfaz del servicio de items
 type ItemService interface {
-	ProcessItemUpdate(ctx context.Context, request *models.ItemUpdateRequest) (*models.ItemRemision, error)
+	ProcessItemUpdate(ctx context.Context, request *models.ItemUpdateRequest) (*models.ItemRemisionDB, error)
 }
 
 // ItemHandler maneja las peticiones HTTP relacionadas con items

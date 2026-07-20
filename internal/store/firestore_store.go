@@ -25,7 +25,7 @@ func NewFirestoreStore(client *firestore.Client, collectionName string) *Firesto
 }
 
 // GetItemBySKU busca un item en Firestore usando el SKU como document ID
-func (s *FirestoreStore) GetItemBySKU(ctx context.Context, sku string) (*models.ItemRemision, error) {
+func (s *FirestoreStore) GetItemDataBySKU(ctx context.Context, sku string) (*models.ItemData, error) {
 	log.Printf("🔍 Buscando en Firestore colección '%s' documento ID: %s", s.collection, sku)
 
 	// Obtener el documento usando el SKU como ID
@@ -46,45 +46,39 @@ func (s *FirestoreStore) GetItemBySKU(ctx context.Context, sku string) (*models.
 		return nil, nil
 	}
 
-	// Convertir los datos a ItemRemision
-	var item models.ItemRemision
-	if err := docSnap.DataTo(&item); err != nil {
+	// Convertir los datos a ItemData
+	var itemData models.ItemData
+	if err := docSnap.DataTo(&itemData); err != nil {
 		return nil, fmt.Errorf("error al deserializar documento de Firestore: %w", err)
 	}
 
 	// Asegurar que el SKU esté presente (por si no viene en el documento)
-	if item.SKU == "" {
-		item.SKU = sku
+	if itemData.SKU == "" {
+		itemData.SKU = sku
 	}
 
-	log.Printf("✅ Item encontrado en Firestore: SKU=%s, Name=%s", item.SKU, item.Name)
-	return &item, nil
+	log.Printf("✅ Item encontrado en Firestore: SKU=%s, ProductName=%s, Color=%s",
+		itemData.SKU, itemData.ProductName, itemData.Color)
+	return &itemData, nil
 }
 
-// CreateItem guarda un item en Firestore usando el SKU como document ID
-func (s *FirestoreStore) CreateItem(ctx context.Context, item *models.ItemRemision) error {
-	log.Printf("💾 Guardando item en Firestore con SKU: %s", item.SKU)
+// SaveItemData guarda o actualiza un item en Firestore usando el SKU como document ID
+func (s *FirestoreStore) SaveItemData(ctx context.Context, itemData *models.ItemData) error {
+	if itemData.SKU == "" {
+		return fmt.Errorf("SKU es requerido para guardar en Firestore")
+	}
 
-	docRef := s.client.Collection(s.collection).Doc(item.SKU)
-	_, err := docRef.Set(ctx, item)
+	log.Printf("💾 Guardando en Firestore colección '%s' documento ID: %s", s.collection, itemData.SKU)
+
+	// Guardar usando el SKU como ID del documento
+	docRef := s.client.Collection(s.collection).Doc(itemData.SKU)
+	_, err := docRef.Set(ctx, itemData)
+
 	if err != nil {
 		return fmt.Errorf("error al guardar item en Firestore: %w", err)
 	}
 
-	log.Printf("✅ Item guardado en Firestore: %s", item.SKU)
-	return nil
-}
-
-// UpdateItem actualiza un item en Firestore
-func (s *FirestoreStore) UpdateItem(ctx context.Context, item *models.ItemRemision) error {
-	log.Printf("🔄 Actualizando item en Firestore: %s", item.SKU)
-
-	docRef := s.client.Collection(s.collection).Doc(item.SKU)
-	_, err := docRef.Set(ctx, item, firestore.MergeAll)
-	if err != nil {
-		return fmt.Errorf("error al actualizar item en Firestore: %w", err)
-	}
-
-	log.Printf("✅ Item actualizado en Firestore: %s", item.SKU)
+	log.Printf("✅ Item guardado en Firestore: SKU=%s, ProductName=%s",
+		itemData.SKU, itemData.ProductName)
 	return nil
 }
