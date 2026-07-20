@@ -2,8 +2,18 @@ package models
 
 import (
 	"database/sql"
+	"errors"
 	"time"
 )
+
+// ErrSKUNoData es un error que indica que el SKU no tiene datos disponibles
+// Este error no debe causar reintentos en Pub/Sub
+var ErrSKUNoData = errors.New("SKU sin datos disponibles")
+
+// IsNoDataError verifica si un error es de tipo "sin datos"
+func IsNoDataError(err error) bool {
+	return errors.Is(err, ErrSKUNoData)
+}
 
 // PubSubMessage representa el mensaje recibido de Google Cloud Pub/Sub
 type PubSubMessage struct {
@@ -18,19 +28,10 @@ type PubSubMessage struct {
 
 // ItemUpdateRequest representa la solicitud de actualización de item desde Pub/Sub
 type ItemUpdateRequest struct {
-	SaveTable   string    `json:"saveTable"`
-	SaveDataset string    `json:"saveDataset"`
-	LogObject   LogObject `json:"logObject"`
-}
-
-// LogObject contiene la información del item a actualizar
-type LogObject struct {
 	IDRemision     int64  `json:"idRemision"`
 	IDItemRemision int64  `json:"idItemRemision"`
 	OrderNumber    string `json:"orderNumber"`
 	SKU            string `json:"sku"`
-	ItemDesc       string `json:"itemDesc"`
-	ItemShortDesc  string `json:"itemShortDesc"`
 }
 
 // ItemData representa los datos del item en Firestore (colección items-data-collection)
@@ -45,6 +46,8 @@ type ItemData struct {
 	Seccion        string `firestore:"seccion" json:"seccion"`
 	TamanoUnico    string `firestore:"tamanoUnico" json:"tamanoUnico"`
 	TextoAdicional string `firestore:"textoAdicional" json:"textoAdicional"`
+	// HasData indica si este SKU tiene datos válidos (true) o si está marcado como "no encontrado" (false)
+	HasData bool `firestore:"hasData" json:"hasData"`
 }
 
 // ItemRemision representa un item en la tabla item_remision

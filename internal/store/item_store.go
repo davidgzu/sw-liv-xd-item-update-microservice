@@ -46,9 +46,9 @@ func (s *ItemStore) GetItemRemisionByID(ctx context.Context, idItemRemision int6
 }
 
 // UpdateItemRemision actualiza los campos de un ItemRemision con datos de Firestore
-func (s *ItemStore) UpdateItemRemision(ctx context.Context, idItemRemision int64, itemData *models.ItemData, itemDesc, itemShortDesc string) error {
-	// Generar material_name con lógica de prioridades
-	materialName := s.buildMaterialName(itemData, itemDesc, itemShortDesc)
+func (s *ItemStore) UpdateItemRemision(ctx context.Context, idItemRemision int64, itemData *models.ItemData) error {
+	// Generar material_name: ProductName + Color + Talla
+	materialName := s.buildMaterialName(itemData)
 
 	log.Printf("🔍 Validando imageURL: %s", itemData.ImageURL)
 
@@ -149,39 +149,21 @@ func (s *ItemStore) isValidImageURL(imageURL string) bool {
 	return false
 }
 
-// buildMaterialName construye la descripción del material con lógica de prioridades
-func (s *ItemStore) buildMaterialName(itemData *models.ItemData, itemDesc, itemShortDesc string) string {
-	var baseName string
-
-	// Prioridad 1: ItemDesc si tiene contenido significativo (>50 caracteres)
-	if len(itemDesc) > 50 {
-		baseName = itemDesc
-		// Verificar si itemDesc ya contiene color y talla
-		if s.containsColorAndSize(itemDesc, itemData.Color, itemData.TamanoUnico) {
-			return itemDesc // Ya tiene todo, retornar tal cual
-		}
-	} else if itemShortDesc != "" {
-		// Prioridad 2: ItemShortDesc si existe
-		baseName = itemShortDesc
-		// Verificar si itemShortDesc ya contiene color y talla
-		if s.containsColorAndSize(itemShortDesc, itemData.Color, itemData.TamanoUnico) {
-			return itemShortDesc // Ya tiene todo, retornar tal cual
-		}
-	} else {
-		// Prioridad 3: ProductName de Firestore
-		baseName = itemData.ProductName
-	}
-
-	// Agregar color y talla si existen y no están en el texto base
+// buildMaterialName construye la descripción del material: ProductName + Color + Talla
+func (s *ItemStore) buildMaterialName(itemData *models.ItemData) string {
 	var parts []string
-	if baseName != "" {
-		parts = append(parts, baseName)
+
+	// ProductName es la base (siempre debe existir)
+	if itemData.ProductName != "" {
+		parts = append(parts, itemData.ProductName)
 	}
 
+	// Agregar Color si existe
 	if itemData.Color != "" {
 		parts = append(parts, "Color: "+itemData.Color)
 	}
 
+	// Agregar Talla si existe
 	if itemData.TamanoUnico != "" {
 		parts = append(parts, "Talla: "+itemData.TamanoUnico)
 	}
@@ -196,43 +178,4 @@ func (s *ItemStore) buildMaterialName(itemData *models.ItemData, itemDesc, itemS
 	}
 
 	return result
-}
-
-// containsColorAndSize verifica si el texto ya contiene información de color y talla
-func (s *ItemStore) containsColorAndSize(text, color, size string) bool {
-	if color == "" && size == "" {
-		return false // No hay nada que validar
-	}
-
-	hasColor := s.containsIgnoreCase(text, color)
-	hasSize := s.containsIgnoreCase(text, size)
-
-	// Si ambos campos existen en los datos, verificar que ambos estén en el texto
-	if color != "" && size != "" {
-		return hasColor && hasSize
-	}
-
-	// Si solo hay color, verificar que el color esté en el texto
-	if color != "" {
-		return hasColor
-	}
-
-	// Si solo hay talla, verificar que la talla esté en el texto
-	if size != "" {
-		return hasSize
-	}
-
-	return false
-}
-
-// containsIgnoreCase verifica si una cadena contiene otra (case insensitive)
-func (s *ItemStore) containsIgnoreCase(text, substr string) bool {
-	if substr == "" {
-		return false
-	}
-
-	textLower := strings.ToLower(text)
-	substrLower := strings.ToLower(substr)
-
-	return strings.Contains(textLower, substrLower)
 }

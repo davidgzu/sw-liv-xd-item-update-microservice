@@ -59,10 +59,16 @@ type ExternalConfig struct {
 func LoadConfig() (*AppConfig, error) {
 	godotenv.Load()
 
+	// Cloud Run usa la variable PORT, pero localmente usamos SERVER_PORT
+	serverPort := getEnv("PORT", "")
+	if serverPort == "" {
+		serverPort = getEnv("SERVER_PORT", "8080")
+	}
+
 	cfg := &AppConfig{
 		Env: getEnv("APP_ENV", "dev"),
 		Server: ServerConfig{
-			Port:         getEnv("SERVER_PORT", "8080"),
+			Port:         serverPort,
 			ReadTimeout:  getEnvDuration("SERVER_READ_TIMEOUT", 30*time.Second),
 			WriteTimeout: getEnvDuration("SERVER_WRITE_TIMEOUT", 120*time.Second),
 		},

@@ -23,7 +23,7 @@ type ExternalService interface {
 // MySQLStore define la interfaz para operaciones de MySQL
 type MySQLStore interface {
 	GetItemRemisionByID(ctx context.Context, idItemRemision int64) (*models.ItemRemisionDB, error)
-	UpdateItemRemision(ctx context.Context, idItemRemision int64, itemData *models.ItemData, itemDesc, itemShortDesc string) error
+	UpdateItemRemision(ctx context.Context, idItemRemision int64, itemData *models.ItemData) error
 }
 
 // ItemService maneja la lógica de negocio para items
@@ -47,25 +47,22 @@ func NewItemService(firestoreStore FirestoreStore, mysqlStore MySQLStore, extern
 // ProcessItemUpdate procesa la actualización de un item
 func (s *ItemService) ProcessItemUpdate(ctx context.Context, request *models.ItemUpdateRequest) (*models.ItemRemisionDB, error) {
 	// Obtener datos del mensaje
-	sku := request.LogObject.SKU
-	idItemRemision := request.LogObject.IDItemRemision
-	itemDesc := request.LogObject.ItemDesc
-	itemShortDesc := request.LogObject.ItemShortDesc
+	sku := request.SKU
+	idItemRemision := request.IDItemRemision
 
-	log.Printf("📦 Procesando item: SKU=%s, IDItemRemision=%d",
-		sku, idItemRemision)
-	log.Printf("   ItemDesc: %s", itemDesc)
-	log.Printf("   ItemShortDesc: %s", itemShortDesc)
+	log.Printf("📦 Procesando item: SKU=%s, IDItemRemision=%d", sku, idItemRemision)
 
 	// 1. Buscar datos del item en Firestore usando SKU como document ID
 	itemData, err := s.firestoreStore.GetItemDataBySKU(ctx, sku)
-	if err != nil {
-		return nil, fmt.Errorf("error al buscar item en Firestore: %w", err)
-	}
 
-	// Si no se encuentra en Firestore, buscar en servicio externo
-	if itemData == nil {
-		log.Printf("⚠️  Item con SKU %s no encontrado en Firestore, buscando en servicio externo...", sku)
+	// Si Firestore retorna error o no encuentra el documento, usar servicio externo
+	if err != nil || itemData == nil {
+		if err != nil {
+			log.Printf("⚠️  Error al buscar en Firestore: %v", err)
+			log.Printf("⚠️  Intentando fallback al servicio externo...")
+		} else {
+			log.Printf("⚠️  Item con SKU %s no encontrado en Firestore, buscando en servicio externo...", sku)
+		}
 
 		// Llamar al servicio externo
 		itemData, err = s.externalService.GetItemDataBySKU(ctx, sku)
@@ -74,25 +71,57 @@ func (s *ItemService) ProcessItemUpdate(ctx context.Context, request *models.Ite
 		}
 
 		if itemData == nil {
-			return nil, fmt.Errorf("item con SKU %s no encontrado en servicio externo", sku)
+			// SKU no encontrado en servicio externo - guardar en Firestore como "sin datos"
+			log.Printf("❌ Item con SKU %s no encontrado en servicio externo, guardando en Firestore con HasData=false", sku)
+			emptyItem := &models.ItemData{
+				SKU:     sku,
+				HasData: false,
+			}
+			// Guardar en Firestore para evitar búsquedas futuras (best effort)
+			if err := s.firestoreStore.SaveItemData(ctx, emptyItem); err != nil {
+				log.Printf("⚠️  Error al guardar SKU vacío en Firestore (no crítico): %v", err)
+			} else {
+				log.Printf("💾 SKU guardado en Firestore como 'sin datos': %s", sku)
+			}
+			return nil, fmt.Errorf("%w: SKU %s no encontrado", models.ErrSKUNoData, sku)
 		}
 
 		log.Printf("✅ Datos obtenidos del servicio externo: ProductName=%s, Color=%s, Talla=%s",
 			itemData.ProductName, itemData.Color, itemData.TamanoUnico)
 
-		// Guardar en Firestore para futuras consultas
+		// Marcar como válido y guardar en Firestore
+		itemData.HasData = true
 		if err := s.firestoreStore.SaveItemData(ctx, itemData); err != nil {
 			log.Printf("⚠️  Error al guardar item en Firestore (no crítico): %v", err)
-			// No retornar error, continuar con el flujo
 		} else {
 			log.Printf("💾 Item guardado en Firestore para futuras consultas: SKU=%s", sku)
 		}
 	} else {
+		// Encontrado en Firestore - verificar si tiene datos válidos
+		if !itemData.HasData {
+			log.Printf("🚫 SKU %s marcado en Firestore como 'sin datos' (HasData=false), terminando proceso sin reintentos", sku)
+			return nil, fmt.Errorf("%w: SKU %s previamente verificado", models.ErrSKUNoData, sku)
+		}
 		log.Printf("✅ Datos encontrados en Firestore: ProductName=%s, Color=%s, Talla=%s",
 			itemData.ProductName, itemData.Color, itemData.TamanoUnico)
 	}
 
-	// 2. Verificar que el ItemRemision existe en MySQL
+	// 2. Validar que ProductName tenga datos (campo crítico)
+	if itemData.ProductName == "" {
+		log.Printf("❌ SKU %s tiene ProductName vacío, no se puede generar descripción válida", sku)
+		log.Printf("🚫 Terminando proceso sin actualizar MySQL (no se reintentará)")
+		return nil, fmt.Errorf("%w: SKU %s con ProductName vacío", models.ErrSKUNoData, sku)
+	}
+
+	// Advertir si Color o TamañoUnico están vacíos (no crítico, se continúa)
+	if itemData.Color == "" {
+		log.Printf("⚠️  SKU %s no tiene Color, se generará descripción sin este campo", sku)
+	}
+	if itemData.TamanoUnico == "" {
+		log.Printf("⚠️  SKU %s no tiene TamañoUnico, se generará descripción sin este campo", sku)
+	}
+
+	// 3. Verificar que el ItemRemision existe en MySQL
 	existingItem, err := s.mysqlStore.GetItemRemisionByID(ctx, idItemRemision)
 	if err != nil {
 		return nil, fmt.Errorf("error al buscar ItemRemision en MySQL: %w", err)
@@ -102,15 +131,15 @@ func (s *ItemService) ProcessItemUpdate(ctx context.Context, request *models.Ite
 		return nil, fmt.Errorf("ItemRemision con ID %d no encontrado en MySQL", idItemRemision)
 	}
 
-	// 3. Actualizar ItemRemision en MySQL con datos de Firestore y del mensaje
-	err = s.mysqlStore.UpdateItemRemision(ctx, idItemRemision, itemData, itemDesc, itemShortDesc)
+	// 4. Actualizar ItemRemision en MySQL con datos de Firestore/servicio externo
+	err = s.mysqlStore.UpdateItemRemision(ctx, idItemRemision, itemData)
 	if err != nil {
 		return nil, fmt.Errorf("error al actualizar ItemRemision en MySQL: %w", err)
 	}
 
 	log.Printf("✅ ItemRemision actualizado: ID=%d, SKU=%s", idItemRemision, itemData.SKU)
 
-	// 4. Retornar el item actualizado
+	// 5. Retornar el item actualizado
 	updatedItem, err := s.mysqlStore.GetItemRemisionByID(ctx, idItemRemision)
 	if err != nil {
 		return nil, fmt.Errorf("error al obtener ItemRemision actualizado: %w", err)
