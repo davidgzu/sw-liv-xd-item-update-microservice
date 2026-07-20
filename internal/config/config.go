@@ -150,6 +150,14 @@ func getEnv(key, defaultValue string) string {
 
 // GetSecretValue obtiene un valor desde Secret Manager
 func GetSecretValue(ctx context.Context, projectID, secretName string) ([]byte, error) {
+	// Limpiar GOOGLE_APPLICATION_CREDENTIALS temporalmente para forzar el uso
+	// del service account de Cloud Run
+	oldCreds := os.Getenv("GOOGLE_APPLICATION_CREDENTIALS")
+	if oldCreds != "" {
+		os.Unsetenv("GOOGLE_APPLICATION_CREDENTIALS")
+		defer os.Setenv("GOOGLE_APPLICATION_CREDENTIALS", oldCreds)
+	}
+
 	client, err := secretmanager.NewClient(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create secret manager client: %w", err)

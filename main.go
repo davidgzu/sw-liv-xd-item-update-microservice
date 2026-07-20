@@ -38,6 +38,39 @@ func main() {
 	// Crear contexto para inicialización
 	ctx := context.Background()
 
+	// Configurar Echo PRIMERO para responder health checks
+	e := echo.New()
+	e.Server.ReadTimeout = appCfg.Server.ReadTimeout
+	e.Server.WriteTimeout = appCfg.Server.WriteTimeout
+
+	// Middleware
+	e.Use(middleware.Logger())
+	e.Use(middleware.Recover())
+	e.Use(middleware.CORS())
+
+	// Health check básico que siempre responde
+	e.GET("/health", func(c echo.Context) error {
+		return c.JSON(http.StatusOK, map[string]string{"status": "healthy"})
+	})
+	e.GET("/", func(c echo.Context) error {
+		return c.JSON(http.StatusOK, map[string]string{"status": "ok", "service": "item-update-microservice"})
+	})
+
+	// Iniciar servidor en goroutine ANTES de inicializar conexiones
+	serverStarted := make(chan bool)
+	go func() {
+		addr := fmt.Sprintf(":%s", appCfg.Server.Port)
+		log.Printf("🚀 Servidor HTTP iniciando en %s", addr)
+		serverStarted <- true
+		if err := e.Start(addr); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("Error al iniciar servidor: %v", err)
+		}
+	}()
+	<-serverStarted
+
+	// Ahora inicializar conexiones en background
+	log.Println("⏳ Inicializando conexiones a bases de datos...")
+
 	// Inicializar conexión MySQL
 	dsn := appCfg.Database.DSN()
 	db, err := sqlx.Connect("mysql", dsn)
@@ -109,27 +142,10 @@ func main() {
 	// Inicializar handlers
 	itemHandler := handlers.NewItemHandler(itemService)
 
-	// Configurar Echo
-	e := echo.New()
-	e.Server.ReadTimeout = appCfg.Server.ReadTimeout
-	e.Server.WriteTimeout = appCfg.Server.WriteTimeout
-
-	// Middleware
-	e.Use(middleware.Logger())
-	e.Use(middleware.Recover())
-	e.Use(middleware.CORS())
-
-	// Configurar rutas
+	// Configurar rutas de la aplicación (ahora que todo está listo)
 	router.SetupRoutes(e, itemHandler)
 
-	// Iniciar servidor
-	go func() {
-		addr := fmt.Sprintf(":%s", appCfg.Server.Port)
-		log.Printf("Servidor iniciando en el puerto %s", appCfg.Server.Port)
-		if err := e.Start(addr); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("Error al iniciar servidor: %v", err)
-		}
-	}()
+	log.Println("✅ Aplicación completamente inicializada y lista para recibir tráfico")
 
 	// Graceful shutdown
 	quit := make(chan os.Signal, 1)
@@ -137,10 +153,10 @@ func main() {
 	<-quit
 
 	log.Println("Deteniendo servidor...")
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	if err := e.Shutdown(ctx); err != nil {
+	if err := e.Shutdown(shutdownCtx); err != nil {
 		log.Fatal(err)
 	}
 
