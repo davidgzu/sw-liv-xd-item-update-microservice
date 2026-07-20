@@ -12,6 +12,13 @@ bin/
 .env
 .env.local
 
+# Google Cloud Credentials (NUNCA commitear credenciales)
+*-firebase.json
+*-credentials.json
+service-account*.json
+firebase-adminsdk*.json
+crp-*.json
+
 # IDE
 .vscode/
 .idea/
