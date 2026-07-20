@@ -39,7 +39,7 @@ steps:
           - '--port=8080'
           - '--timeout=120'
           - '--service-account=crp-qas-log-xd-sa@crp-qas-log-xd.iam.gserviceaccount.com'
-          - '--set-env-vars=SERVER_PORT=8080,APP_ENV=qa,GCP_PROJECT_ID=crp-qas-log-xd,FIRESTORE_DATABASE_ID=logs,GOOGLE_APPLICATION_CREDENTIALS=/app/crp-qas-log-firebase.json,EXTERNAL_SERVICE_URL=http://172.18.237.165:8080/process-engine/public/rt/SurtidoYXDFastDataAccess,DB_USER=USR_APPSURTIDOXD,DB_PASSWORD=App_surtido_liv24,DB_NAME=xd_migration_prod,DB_UNIX_SOCKET=/cloudsql/crp-qas-log-xd:us-east4:crp-qas-xd-sql-db-2,DB_PARAMS=parseTime=true&charset=utf8mb4&timeout=10s&readTimeout=60s&writeTimeout=30s,DB_MAX_OPEN_CONNS=25,DB_MAX_IDLE_CONNS=10,DB_CONN_MAX_LIFETIME=30m,DB_CONN_MAX_IDLE_TIME=5m,SERVER_READ_TIMEOUT=30s,SERVER_WRITE_TIMEOUT=120s'
+          - '--set-env-vars=SERVER_PORT=8080,APP_ENV=qa,GCP_PROJECT_ID=crp-qas-log-xd,FIRESTORE_DATABASE_ID=logs,GOOGLE_APPLICATION_CREDENTIALS=/app/crp-qas-log-firebase.json,EXTERNAL_SERVICE_URL=http://172.18.237.165:8080/process-engine/public/rt/SurtidoYXDFastDataAccess,DB_USER=userDebug,DB_PASSWORD=userDebug1,DB_NAME=xd_migration_prod,DB_UNIX_SOCKET=/cloudsql/crp-qas-log-xd:us-east4:crp-qas-xd-sql-db-2,DB_PARAMS=parseTime=true&charset=utf8mb4&timeout=10s&readTimeout=60s&writeTimeout=30s,DB_MAX_OPEN_CONNS=25,DB_MAX_IDLE_CONNS=10,DB_CONN_MAX_LIFETIME=30m,DB_CONN_MAX_IDLE_TIME=5m,SERVER_READ_TIMEOUT=30s,SERVER_WRITE_TIMEOUT=120s'
           - '--allow-unauthenticated'
           - '--add-cloudsql-instances=crp-qas-log-xd:us-east4:crp-qas-xd-sql-db-2'
           - '--vpc-connector=projects/corp-qas-net-shared/locations/us-east4/connectors/corp-net-qas-xd-svrless-2'
