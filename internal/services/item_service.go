@@ -45,7 +45,7 @@ func NewItemService(firestoreStore FirestoreStore, mysqlStore MySQLStore, extern
 }
 
 // ProcessItemUpdate procesa la actualización de un item
-func (s *ItemService) ProcessItemUpdate(ctx context.Context, request *models.ItemUpdateRequest) (*models.ItemRemisionDB, error) {
+func (s *ItemService) ProcessItemUpdate(ctx context.Context, request *models.ItemUpdateRequest) error {
 	// Obtener datos del mensaje
 	sku := request.SKU
 	idItemRemision := request.IDItemRemision
@@ -67,7 +67,7 @@ func (s *ItemService) ProcessItemUpdate(ctx context.Context, request *models.Ite
 		// Llamar al servicio externo
 		itemData, err = s.externalService.GetItemDataBySKU(ctx, sku)
 		if err != nil {
-			return nil, fmt.Errorf("error al buscar item en servicio externo: %w", err)
+			return fmt.Errorf("error al buscar item en servicio externo: %w", err)
 		}
 
 		if itemData == nil {
@@ -83,7 +83,7 @@ func (s *ItemService) ProcessItemUpdate(ctx context.Context, request *models.Ite
 			} else {
 				log.Printf("💾 SKU guardado en Firestore como 'sin datos': %s", sku)
 			}
-			return nil, fmt.Errorf("%w: SKU %s no encontrado", models.ErrSKUNoData, sku)
+			return fmt.Errorf("%w: SKU %s no encontrado", models.ErrSKUNoData, sku)
 		}
 
 		log.Printf("✅ Datos obtenidos del servicio externo: ProductName=%s, Color=%s, Talla=%s",
@@ -100,7 +100,7 @@ func (s *ItemService) ProcessItemUpdate(ctx context.Context, request *models.Ite
 		// Encontrado en Firestore - verificar si tiene datos válidos
 		if !itemData.HasData {
 			log.Printf("🚫 SKU %s marcado en Firestore como 'sin datos' (HasData=false), terminando proceso sin reintentos", sku)
-			return nil, fmt.Errorf("%w: SKU %s previamente verificado", models.ErrSKUNoData, sku)
+			return fmt.Errorf("%w: SKU %s previamente verificado", models.ErrSKUNoData, sku)
 		}
 		log.Printf("✅ Datos encontrados en Firestore: ProductName=%s, Color=%s, Talla=%s",
 			itemData.ProductName, itemData.Color, itemData.TamanoUnico)
@@ -110,7 +110,7 @@ func (s *ItemService) ProcessItemUpdate(ctx context.Context, request *models.Ite
 	if itemData.ProductName == "" {
 		log.Printf("❌ SKU %s tiene ProductName vacío, no se puede generar descripción válida", sku)
 		log.Printf("🚫 Terminando proceso sin actualizar MySQL (no se reintentará)")
-		return nil, fmt.Errorf("%w: SKU %s con ProductName vacío", models.ErrSKUNoData, sku)
+		return fmt.Errorf("%w: SKU %s con ProductName vacío", models.ErrSKUNoData, sku)
 	}
 
 	// Advertir si Color o TamañoUnico están vacíos (no crítico, se continúa)
@@ -121,29 +121,14 @@ func (s *ItemService) ProcessItemUpdate(ctx context.Context, request *models.Ite
 		log.Printf("⚠️  SKU %s no tiene TamañoUnico, se generará descripción sin este campo", sku)
 	}
 
-	// 3. Verificar que el ItemRemision existe en MySQL
-	existingItem, err := s.mysqlStore.GetItemRemisionByID(ctx, idItemRemision)
-	if err != nil {
-		return nil, fmt.Errorf("error al buscar ItemRemision en MySQL: %w", err)
-	}
-
-	if existingItem == nil {
-		return nil, fmt.Errorf("ItemRemision con ID %d no encontrado en MySQL", idItemRemision)
-	}
-
-	// 4. Actualizar ItemRemision en MySQL con datos de Firestore/servicio externo
+	// 3. Actualizar ItemRemision en MySQL con datos de Firestore/servicio externo
+	// (UpdateItemRemision valida que el registro exista verificando rowsAffected)
 	err = s.mysqlStore.UpdateItemRemision(ctx, idItemRemision, itemData)
 	if err != nil {
-		return nil, fmt.Errorf("error al actualizar ItemRemision en MySQL: %w", err)
+		return fmt.Errorf("error al actualizar ItemRemision en MySQL: %w", err)
 	}
 
-	log.Printf("✅ ItemRemision actualizado: ID=%d, SKU=%s", idItemRemision, itemData.SKU)
+	log.Printf("✅ ItemRemision actualizado exitosamente: ID=%d, SKU=%s", idItemRemision, itemData.SKU)
 
-	// 5. Retornar el item actualizado
-	updatedItem, err := s.mysqlStore.GetItemRemisionByID(ctx, idItemRemision)
-	if err != nil {
-		return nil, fmt.Errorf("error al obtener ItemRemision actualizado: %w", err)
-	}
-
-	return updatedItem, nil
+	return nil
 }

@@ -14,7 +14,7 @@ import (
 
 // ItemService define la interfaz del servicio de items
 type ItemService interface {
-	ProcessItemUpdate(ctx context.Context, request *models.ItemUpdateRequest) (*models.ItemRemisionDB, error)
+	ProcessItemUpdate(ctx context.Context, request *models.ItemUpdateRequest) error
 }
 
 // ItemHandler maneja las peticiones HTTP relacionadas con items
@@ -82,7 +82,7 @@ func (h *ItemHandler) HandlePubSubMessage(c echo.Context) error {
 
 	// Procesar el item
 	ctx := c.Request().Context()
-	result, err := h.service.ProcessItemUpdate(ctx, &itemRequest)
+	err = h.service.ProcessItemUpdate(ctx, &itemRequest)
 	if err != nil {
 		// Si es un error de "SKU sin datos", retornar 200 para evitar reintentos
 		if models.IsNoDataError(err) {
@@ -107,6 +107,6 @@ func (h *ItemHandler) HandlePubSubMessage(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]interface{}{
 		"success": true,
 		"message": "Item processed successfully",
-		"data":    result,
+		"sku":     itemRequest.SKU,
 	})
 }

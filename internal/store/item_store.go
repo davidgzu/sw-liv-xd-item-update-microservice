@@ -149,32 +149,24 @@ func (s *ItemStore) isValidImageURL(imageURL string) bool {
 	return false
 }
 
-// buildMaterialName construye la descripción del material: ProductName + Color + Talla
+// buildMaterialName construye la descripción del material: ProductName TextoAdicional | Color | Talla
 func (s *ItemStore) buildMaterialName(itemData *models.ItemData) string {
-	var parts []string
+	// Comenzar con ProductName
+	result := itemData.ProductName
 
-	// ProductName es la base (siempre debe existir)
-	if itemData.ProductName != "" {
-		parts = append(parts, itemData.ProductName)
+	// Agregar TextoAdicional si existe (con espacio, sin pipe)
+	if itemData.TextoAdicional != "" {
+		result += " " + itemData.TextoAdicional
 	}
 
-	// Agregar Color si existe
+	// Agregar Color si existe (con pipe)
 	if itemData.Color != "" {
-		parts = append(parts, "Color: "+itemData.Color)
+		result += " | Color: " + itemData.Color
 	}
 
-	// Agregar Talla si existe
+	// Agregar Talla si existe (con pipe)
 	if itemData.TamanoUnico != "" {
-		parts = append(parts, "Talla: "+itemData.TamanoUnico)
-	}
-
-	// Unir las partes con " | "
-	result := ""
-	for i, part := range parts {
-		if i > 0 {
-			result += " | "
-		}
-		result += part
+		result += " | Talla: " + itemData.TamanoUnico
 	}
 
 	return result

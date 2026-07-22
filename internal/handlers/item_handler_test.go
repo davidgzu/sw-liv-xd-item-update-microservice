@@ -3,7 +3,6 @@ package handlers
 import (
 	"bytes"
 	"context"
-	"database/sql"
 	"encoding/base64"
 	"encoding/json"
 	"net/http"
@@ -17,10 +16,10 @@ import (
 
 // MockItemService es un mock del servicio de items
 type MockItemService struct {
-	processFunc func(ctx context.Context, request *models.ItemUpdateRequest) (*models.ItemRemisionDB, error)
+	processFunc func(ctx context.Context, request *models.ItemUpdateRequest) error
 }
 
-func (m *MockItemService) ProcessItemUpdate(ctx context.Context, request *models.ItemUpdateRequest) (*models.ItemRemisionDB, error) {
+func (m *MockItemService) ProcessItemUpdate(ctx context.Context, request *models.ItemUpdateRequest) error {
 	return m.processFunc(ctx, request)
 }
 
@@ -82,7 +81,7 @@ func TestHandlePubSubMessage_Success(t *testing.T) {
 
 	// Mock service
 	mockService := &MockItemService{
-		processFunc: func(ctx context.Context, request *models.ItemUpdateRequest) (*models.ItemRemisionDB, error) {
+		processFunc: func(ctx context.Context, request *models.ItemUpdateRequest) error {
 			// Verificar que los datos se parsearon correctamente
 			if request.SKU != "1033804373" {
 				t.Errorf("SKU esperado: 1033804373, obtenido: %s", request.SKU)
@@ -91,12 +90,8 @@ func TestHandlePubSubMessage_Success(t *testing.T) {
 				t.Errorf("IDItemRemision esperado: 456, obtenido: %d", request.IDItemRemision)
 			}
 
-			// Retornar item actualizado
-			return &models.ItemRemisionDB{
-				IDItemRemision: 456,
-				MaterialName:   "iPhone 16 Plus | Color: Negro | Talla: 256 GB",
-				ImageURL:       sql.NullString{String: "https://example.com/image.jpg", Valid: true},
-			}, nil
+			// Retornar éxito
+			return nil
 		},
 	}
 
@@ -229,9 +224,9 @@ func TestHandlePubSubMessage_SKUNoData(t *testing.T) {
 
 	// Mock service que retorna ErrSKUNoData
 	mockService := &MockItemService{
-		processFunc: func(ctx context.Context, request *models.ItemUpdateRequest) (*models.ItemRemisionDB, error) {
+		processFunc: func(ctx context.Context, request *models.ItemUpdateRequest) error {
 			// Simular SKU sin datos (como cuando HasData=false)
-			return nil, models.ErrSKUNoData
+			return models.ErrSKUNoData
 		},
 	}
 
@@ -294,9 +289,9 @@ func TestHandlePubSubMessage_EmptyProductName(t *testing.T) {
 
 	// Mock service que retorna ErrSKUNoData (simula ProductName vacío)
 	mockService := &MockItemService{
-		processFunc: func(ctx context.Context, request *models.ItemUpdateRequest) (*models.ItemRemisionDB, error) {
+		processFunc: func(ctx context.Context, request *models.ItemUpdateRequest) error {
 			// Simular que se encontró el SKU pero ProductName está vacío
-			return nil, models.ErrSKUNoData
+			return models.ErrSKUNoData
 		},
 	}
 
