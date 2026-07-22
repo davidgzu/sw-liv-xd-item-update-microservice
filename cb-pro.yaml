@@ -1,0 +1,50 @@
+steps:
+    # Build Docker image (sin necesidad de GitHub token - solo usa dependencias públicas)
+    - name: 'gcr.io/cloud-builders/docker'
+      id: 'build-image'
+      args:
+          - 'build'
+          - '--no-cache'
+          - '-t'
+          - 'us-east4-docker.pkg.dev/crp-pro-log-xd/gcf-artifacts/item-update-microservice:$COMMIT_SHA'
+          - '-t'
+          - 'us-east4-docker.pkg.dev/crp-pro-log-xd/gcf-artifacts/item-update-microservice:latest'
+          - '.'
+
+    # Push image to Artifact Registry
+    - name: 'gcr.io/cloud-builders/docker'
+      args:
+          - 'push'
+          - 'us-east4-docker.pkg.dev/crp-pro-log-xd/gcf-artifacts/item-update-microservice:$COMMIT_SHA'
+
+    - name: 'gcr.io/cloud-builders/docker'
+      args:
+          - 'push'
+          - 'us-east4-docker.pkg.dev/crp-pro-log-xd/gcf-artifacts/item-update-microservice:latest'
+
+    # Deploy to Cloud Run
+    - name: 'google/cloud-sdk'
+      args:
+          - 'gcloud'
+          - 'run'
+          - 'deploy'
+          - 'pro-item-update'
+          - '--image=us-east4-docker.pkg.dev/crp-pro-log-xd/gcf-artifacts/item-update-microservice:$COMMIT_SHA'
+          - '--region=us-east4'
+          - '--concurrency=40'
+          - '--cpu=2'
+          - '--max-instances=100'
+          - '--memory=1Gi'
+          - '--min-instances=1'
+          - '--port=8080'
+          - '--timeout=300'
+          - '--service-account=crp-pro-log-xd-bdrequest@crp-pro-log-xd.iam.gserviceaccount.com'
+          - '--update-env-vars=SERVER_PORT=8080,APP_ENV=pro,GCP_PROJECT_ID=crp-pro-log-xd,FIRESTORE_DATABASE_ID=definicion-trazo-logistico,FIREBASE_SECRET_NAME=firebase-key,EXTERNAL_SERVICE_URL=https://stepp360.liverpool.com.mx/process-engine/public/rt/SurtidoYXDFastDataAccess,DB_USER=userDebug,DB_PASSWORD=userDebug1,DB_NAME=xd_migration_prod,DB_UNIX_SOCKET=/cloudsql/crp-pro-log-xd:us-east4:crp-pro-xd-oms-mysql-db01,DB_PARAMS=parseTime=true&charset=utf8mb4&timeout=10s&readTimeout=60s&writeTimeout=30s,DB_MAX_OPEN_CONNS=25,DB_MAX_IDLE_CONNS=10,DB_CONN_MAX_LIFETIME=30m,DB_CONN_MAX_IDLE_TIME=5m,SERVER_READ_TIMEOUT=30s,SERVER_WRITE_TIMEOUT=120s'
+          - '--remove-env-vars=GOOGLE_APPLICATION_CREDENTIALS'
+          - '--allow-unauthenticated'
+          - '--add-cloudsql-instances=crp-pro-log-xd:us-east4:crp-pro-xd-oms-mysql-db01'
+          - '--vpc-connector=projects/corp-pro-net-shared/locations/us-east4/connectors/corp-net-pro-xd-svrless-2'
+serviceAccount: 'crp-pro-log-xd-cicd@crp-pro-log-xd.iam.gserviceaccount.com'
+
+options:
+    logging: 'CLOUD_LOGGING_ONLY'
